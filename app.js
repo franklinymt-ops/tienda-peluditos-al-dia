@@ -33,6 +33,8 @@ const trust = `<div class="trust">🚚 Envíos a toda Colombia<br>📦 Pago cont
 const yt = u => (u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/) || [])[1];
 const media = p => [...(p.images || []).map(u => ({ v: 0, u })), ...(p.videos || []).map(u => ({ v: 1, u }))];
 window.sm = n => { const m = media(window._pd.p)[n]; if (!m) return; $("#mm").innerHTML = !m.v ? `<img class="main" src="${esc(m.u)}" alt="${esc(window._pd.p.name)}">` : yt(m.u) ? `<iframe class="main" src="https://www.youtube.com/embed/${yt(m.u)}" allowfullscreen loading="lazy" style="border:0"></iframe>` : `<video class="main" src="${esc(m.u)}" controls playsinline preload="metadata" style="object-fit:contain;background:#000"></video>`; };
+// Foto de un color: la asignada en el panel o, si no hay, la del mismo orden (1.er color = foto #1)
+const colorImg = (p, c) => p.colorImages?.[c] ?? ((i => i >= 0 && i < (p.images || []).length ? i : undefined)((p.variants?.Color || []).indexOf(c)));
 const views = {
   home() {
     const f = products.find(p => p.featured) || products[0];
@@ -93,7 +95,7 @@ ${rel.length ? `<h2>También puede interesarte</h2><div class="grid">${rel.map(c
     const o = JSON.parse(localStorage.getItem("lastOrder") || "null"); if (!o) return views.home();
     return `<div class="box" style="margin-top:24px"><h1>🎉 ¡PEDIDO RECIBIDO!</h1><p>Gracias por confiar en Peluditos al Día.</p><p><b>Pedido:</b> #${esc(o.orderId)}</p>
 ${o.items.map(i => `<p>${i.qty}× ${esc(i.name)} (${esc(i.variant)})</p>`).join("")}<p><b>Total:</b> ${money(o.total)}</p><p><b>Pago:</b> ${o.paymentMethod === "COD" ? "Contra entrega" : "Wompi"}</p>
-<p><b>Entrega:</b> ${esc(o.customer.address)}, ${esc(o.customer.hood)}, ${esc(o.customer.city)}</p><p><b>Estado:</b> ${esc(o.orderStatus)}</p><br>
+<p><b>Entrega:</b> ${esc(o.customer.address)}, ${esc(o.customer.hood)}, ${esc(o.customer.city)}</p><p><b>Estado:</b> ${esc(o.orderStatus)}</p><p id="pst"></p><br>
 <a class="btn b1" target="_blank" rel="noopener" href="${waLink(`Hola, Peluditos al Día. Quiero información sobre mi pedido #${o.orderId}.`)}">CONTACTAR POR WHATSAPP</a></div>`;
   },
   contacto: () => `<h2>Contacto</h2><p>Escríbenos por WhatsApp y te ayudamos con tu pedido.</p><br><a class="btn b1" target="_blank" rel="noopener" href="${waLink("Hola, Peluditos al Día. Quiero información.")}">Escribir por WhatsApp</a>`,
@@ -110,26 +112,41 @@ async function placeOrder(f) {
   if (d.pay === "WOMPI" && !(CONFIG.WOMPI_PUBLIC_KEY && CONFIG.WOMPI_SIGN_ENDPOINT)) return toast("Wompi aún no está configurado. Elige contra entrega.");
   if (db) await fs.setDoc(fs.doc(db, "orders", order.orderId), order);
   localStorage.setItem("lastOrder", JSON.stringify(order));
-  if (d.pay === "WOMPI") { // La firma de integridad se calcula en el backend con el secreto
+  if (d.pay === "WOMPI") { // La firma de integridad la calcula el Worker (el secreto nunca está en el navegador)
     const r = await (await fetch(CONFIG.WOMPI_SIGN_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.orderId, amountInCents: order.total * 100, currency: CONFIG.CURRENCY }) })).json();
-    const u = new URLSearchParams({ "public-key": CONFIG.WOMPI_PUBLIC_KEY, currency: CONFIG.CURRENCY, "amount-in-cents": order.total * 100, reference: order.orderId, "signature:integrity": r.signature, "redirect-url": location.origin + location.pathname + "#/gracias" });
-    track("purchase", { value: order.total }); cart = []; save(); return location.href = "https://checkout.wompi.co/p/?" + u;
+    if (!r.signature) return toast("No se pudo iniciar el pago con Wompi. Intenta de nuevo o elige contra entrega.");
+    const c = order.customer, ph = String(c.phone).replace(/\D/g, "").slice(-10);
+    const u = new URLSearchParams({ "public-key": CONFIG.WOMPI_PUBLIC_KEY, currency: CONFIG.CURRENCY, "amount-in-cents": order.total * 100, reference: order.orderId, "signature:integrity": r.signature,
+      "redirect-url": location.origin + location.pathname + "#/gracias", "customer-data:email": c.email, "customer-data:full-name": c.name,
+      "shipping-address:address-line-1": c.address + ", " + c.hood, "shipping-address:country": "CO", "shipping-address:city": c.city, "shipping-address:region": c.dept });
+    if (ph.length === 10) { u.set("customer-data:phone-number", ph); u.set("customer-data:phone-number-prefix", "+57"); u.set("shipping-address:phone-number", ph); }
+    cart = []; save(); return location.href = "https://checkout.wompi.co/p/?" + u;
   }
   track("purchase", { value: order.total, transaction_id: order.orderId }); cart = []; save(); location.hash = "#/gracias";
 }
 
+// Estado real del pago al volver de Wompi (informativo: la confirmación oficial llega por el webhook)
+async function checkPay() {
+  const id = new URLSearchParams(location.search).get("id") || new URLSearchParams(location.hash.split("?")[1] || "").get("id"), el = $("#pst"); if (!id || !el) return;
+  try {
+    const api = CONFIG.WOMPI_PUBLIC_KEY.startsWith("pub_test_") ? "https://sandbox.wompi.co/v1" : "https://production.wompi.co/v1";
+    const st = (await (await fetch(`${api}/transactions/${encodeURIComponent(id)}`)).json()).data?.status;
+    el.innerHTML = { APPROVED: "✅ <b>Pago aprobado</b>", PENDING: "⏳ <b>Pago en proceso</b>. Te avisaremos cuando se confirme.", DECLINED: "❌ <b>Pago rechazado</b>. Escríbenos por WhatsApp y te ayudamos.", VOIDED: "↩️ <b>Pago anulado</b>", ERROR: "⚠️ <b>Hubo un error con el pago</b>. Escríbenos por WhatsApp." }[st] || "";
+    if (st === "APPROVED") { const o = JSON.parse(localStorage.getItem("lastOrder") || "{}"); track("purchase", { value: o.total, transaction_id: o.orderId }); }
+  } catch {}
+}
 function route() {
   const [, r = "", arg] = location.hash.replace("#", "").split("?")[0].split("/");
-  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if ($("#mm")) sm(window._pd.p.colorImages?.[window._pd.sel.Color] ?? 0);
+  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if (r === "gracias") checkPay(); if ($("#mm")) sm(colorImg(window._pd.p, window._pd.sel.Color) ?? 0);
   const f = $("#ck"); if (f) f.onsubmit = async e => { e.preventDefault(); $("#sb").disabled = true; try { await placeOrder(f); } catch (x) { toast("Error al enviar el pedido. Intenta de nuevo."); } $("#sb") && ($("#sb").disabled = false); };
 }
 document.addEventListener("click", e => {
   const t = e.target, pd = window._pd;
-  if (t.dataset.v) { pd.sel[t.dataset.k] = t.dataset.v; t.parentNode.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === t)); const l = t.parentNode.querySelector(".vl"); if (l) l.textContent = t.dataset.v; const ci = pd.p.colorImages?.[t.dataset.v]; if (t.dataset.k === "Color" && ci !== undefined) sm(+ci); }
+  if (t.dataset.v) { pd.sel[t.dataset.k] = t.dataset.v; t.parentNode.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === t)); const l = t.parentNode.querySelector(".vl"); if (l) l.textContent = t.dataset.v; const ci = colorImg(pd.p, t.dataset.v); if (t.dataset.k === "Color" && ci !== undefined) sm(+ci); }
   if (t.dataset.q) { pd.qty = Math.max(1, pd.qty + +t.dataset.q); $("#q").textContent = pd.qty; }
   if (t.dataset.act) {
     const { p, sel, qty } = pd, variant = Object.values(sel).join(" / ") || "Único", key = p.id + variant, ex = cart.find(i => i.key === key);
-    ex ? ex.qty += qty : cart.push({ key, id: p.id, name: p.name, variant, price: p.price, qty, image: p.images[p.colorImages?.[sel.Color] ?? 0] || p.images[0] });
+    ex ? ex.qty += qty : cart.push({ key, id: p.id, name: p.name, variant, price: p.price, qty, image: p.images[colorImg(p, sel.Color) ?? 0] || p.images[0] });
     save(); track("add_to_cart", { item_id: p.id, value: p.price * qty });
     t.dataset.act === "buy" ? location.hash = "#/checkout" : toast("Agregado al carrito 🐶");
   }
