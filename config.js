@@ -7,7 +7,7 @@ export const CONFIG = {
   WOMPI_PUBLIC_KEY: "", // solo llave PÚBLICA. La privada va en el backend
   WOMPI_SIGN_ENDPOINT: "", // función serverless que firma la transacción
   CURRENCY: "COP",
-  CLOUDINARY_CLOUD_NAME: "", CLOUDINARY_UPLOAD_PRESET: "", // para subir fotos y videos desde admin.html
+  CLOUDINARY_CLOUD_NAME: "dee2ifo9s", CLOUDINARY_UPLOAD_PRESET: "peluditos", // para subir fotos y videos desde admin.html
   SHIPPING_PRICE: 0, // Defínelo: precio de envío
   FIREBASE: {  apiKey: "AIzaSyDqeK3QuudArpgiCnV3LqQJ5NwK-H95a9o",
     authDomain: "peluditos-al-dia.firebaseapp.com",
