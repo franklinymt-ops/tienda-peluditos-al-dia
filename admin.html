@@ -1,7 +1,22 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Admin · Peluditos al Día</title><link rel="stylesheet" href="styles.css">
-<style>.wrap{padding-bottom:60px}.lbl{font-weight:700;margin-top:6px}.thumbs{display:flex;gap:8px;flex-wrap:wrap}.thumbs div{position:relative}.thumbs img,.thumbs video{width:80px;height:80px;object-fit:cover;border-radius:10px}.thumbs b{position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;cursor:pointer}.ck{display:flex;gap:8px;align-items:center}.ck input{width:auto}small{color:var(--m);font-weight:400}</style></head>
+<title>Admin · Peluditos al Día</title><link rel="stylesheet" href="styles.css?v=3">
+<style>
+body{font-size:16px}#app{max-width:980px;margin:auto;padding:20px 16px 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.top h2{margin:8px 0}
+.cd{background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px #0001;display:grid;gap:8px}.cd h3{margin:0 0 6px;color:var(--gd)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.lbl{font-weight:700;font-size:14px;margin-top:6px;display:block}input,select,textarea{font-size:16px}textarea{resize:vertical}
+.thumbs{display:flex;gap:10px;flex-wrap:wrap}.thumbs div{position:relative}.thumbs img,.thumbs video{width:92px;height:92px;object-fit:cover;border-radius:12px}
+.thumbs b{position:absolute;top:-7px;right:-7px;background:var(--r);color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;cursor:pointer}
+.thumbs i{position:absolute;bottom:5px;left:5px;background:#000a;color:#fff;border-radius:6px;font-style:normal;font-size:12px;padding:0 7px}
+.cmr{display:flex;align-items:center;gap:12px;background:#f6f6f0;border-radius:12px;padding:8px 12px}.cmr b{min-width:90px}.cmr select{flex:1}.cmr img{width:56px;height:56px;object-fit:cover;border-radius:10px}
+.ck{display:flex;gap:10px;align-items:center;font-weight:600}.ck input{width:20px;height:20px}small{color:var(--m);font-weight:400}
+.bar2{position:sticky;bottom:0;background:#fffdf6f2;border-top:1px solid #e8e8e0;padding:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}.bar2 p{margin:0;color:var(--r);flex:1}
+.pl{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;margin-top:12px}.pc{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px #0001}
+.pc img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#eee}.pi{padding:12px 14px;display:grid;gap:3px}.pi span{color:var(--m);font-size:14px}.pa{display:flex;gap:8px;padding:0 14px 14px}
+@media(max-width:700px){.g2,.g3{grid-template-columns:1fr}}
+</style></head>
 <body><header><div class="wrap bar"><img src="public/images/logo.png" alt=""><b>Panel de administración</b><button class="btn b3" id="out" style="margin-left:auto;display:none">Salir</button></div></header>
 <main class="wrap" id="app"></main>
 <script type="module">
@@ -25,8 +40,9 @@ function login() {
 async function load() {
   try { list = (await F.getDocs(F.collection(db, "products"))).docs.map(d => ({ id: d.id, ...d.data() })); }
   catch { app.innerHTML = "<h2>Sin permiso</h2><p>Revisa que tu correo esté en las reglas de Firestore.</p>"; return; }
-  app.innerHTML = `<h2>Mis productos</h2><button class="btn b1" id="nw">+ NUEVO PRODUCTO</button><br><br>` + (list.map(p => `<div class="row"><img src="${esc(p.images?.[0])}" alt=""><div style="flex:1"><b>${esc(p.name)}</b><br>${p.price ? money(p.price) : "Sin precio"} · ${p.active ? "✅ Visible" : "⏸ Oculto"}</div><button class="btn b3" data-e="${esc(p.id)}">Editar</button> <button class="btn b3" data-x="${esc(p.id)}">🗑</button></div>`).join("") || "<p>Aún no hay productos. ¡Crea el primero!</p>");
+  app.innerHTML = `<div class="top"><h2>Mis productos <small>(${list.length})</small></h2><button class="btn b1" id="nw">+ Nuevo producto</button></div><div class="pl">` + (list.map(p => `<div class="pc"><img src="${esc(p.images?.[0])}" alt=""><div class="pi"><b>${esc(p.name)}</b><span>${esc(p.category || "")}</span><span class="price">${p.price ? money(p.price) : "Sin precio"}</span><span>${p.active ? "✅ Visible" : "⏸ Oculto"} · Stock: ${p.stock ?? "sin control"}</span></div><div class="pa"><button class="btn b3" data-e="${esc(p.id)}">Editar</button><button class="btn b3" data-x="${esc(p.id)}">🗑</button></div></div>`).join("") || "<p>Aún no hay productos. ¡Crea el primero!</p>") + `</div>`;
   $("#nw").onclick = () => form({ images: [], videos: [], active: true });
+  promoForm();
 }
 app.onclick = async e => {
   const t = e.target, p = list.find(x => x.id === (t.dataset.e || t.dataset.x));
@@ -36,31 +52,59 @@ app.onclick = async e => {
 };
 function form(p) {
   p.images = p.images || []; p.videos = p.videos || []; cur = p; const v = p.variants || {};
-  app.innerHTML = `<h2>${p.id ? "Editar" : "Nuevo"} producto</h2><form id="pf">
-<label class="lbl">Nombre</label><input id="n" required value="${esc(p.name)}">
+  app.innerHTML = `<div class="top"><h2>${p.id ? "Editar" : "Nuevo"} producto</h2><button type="button" class="btn b3" id="cn">← Volver</button></div><form id="pf">
+<section class="cd"><h3>1. Información</h3>
+<label class="lbl">Nombre del producto</label><input id="n" required value="${esc(p.name)}">
 <label class="lbl">Frase corta <small>(se ve en la tarjeta)</small></label><input id="s" value="${esc(p.short)}">
-<label class="lbl">Descripción</label><textarea id="d" rows="4">${esc(p.description)}</textarea>
-<div class="two"><div><label class="lbl">Precio (COP)</label><input id="pr" type="number" min="1" required value="${p.price || ""}"></div>
-<div><label class="lbl">Precio anterior <small>(opcional, muestra el descuento)</small></label><input id="po" type="number" min="0" value="${p.oldPrice || ""}"></div></div>
-<div class="two"><div><label class="lbl">Categoría</label><input id="c" list="cl" value="${esc(p.category)}"><datalist id="cl">${[...new Set(list.map(x => x.category).filter(Boolean))].map(c => `<option>${esc(c)}`).join("")}</datalist></div>
-<div><label class="lbl">Stock <small>(vacío = sin control, 0 = agotado)</small></label><input id="st" type="number" min="0" value="${p.stock ?? ""}"></div></div>
-<div class="two"><div><label class="lbl">Colores <small>(separados por coma)</small></label><input id="co" placeholder="Azul, Amarillo" value="${esc((v.Color || []).join(", "))}"></div>
-<div><label class="lbl">Tamaños <small>(separados por coma)</small></label><input id="tm" placeholder="S, M, L" value="${esc((v.Tamaño || []).join(", "))}"></div></div>
-<label class="lbl">Beneficios <small>(uno por línea)</small></label><textarea id="b" rows="3">${esc((p.benefits || []).join("\n"))}</textarea>
-<label class="lbl">Reseñas reales <small>(una por línea: Nombre | comentario)</small></label><textarea id="r" rows="3">${esc((p.reviews || []).map(r => r.name + " | " + r.text).join("\n"))}</textarea>
-<label class="lbl">Fotos</label><input id="fi" type="file" accept="image/*" multiple><div class="thumbs" id="ti"></div>
+<label class="lbl">Descripción</label><textarea id="d" rows="6">${esc(p.description)}</textarea>
+<label class="lbl">Beneficios <small>(uno por línea)</small></label><textarea id="b" rows="5">${esc((p.benefits || []).join("\n"))}</textarea></section>
+<section class="cd"><h3>2. Precio e inventario</h3>
+<div class="g3"><div><label class="lbl">Precio (COP)</label><input id="pr" type="number" min="1" required value="${p.price || ""}"></div>
+<div><label class="lbl">Precio anterior <small>(opcional)</small></label><input id="po" type="number" min="0" value="${p.oldPrice || ""}"></div>
+<div><label class="lbl">Stock <small>(vacío = sin control)</small></label><input id="st" type="number" min="0" value="${p.stock ?? ""}"></div></div>
+<label class="lbl">Categoría</label><input id="c" list="cl" value="${esc(p.category)}"><datalist id="cl">${[...new Set(list.map(x => x.category).filter(Boolean))].map(c => `<option>${esc(c)}`).join("")}</datalist></section>
+<section class="cd"><h3>3. Colores y tamaños</h3>
+<div class="g2"><div><label class="lbl">Colores <small>(separados por coma)</small></label><input id="co" placeholder="Azul, Amarillo" value="${esc((v.Color || []).join(", "))}"></div>
+<div><label class="lbl">Tamaños <small>(separados por coma)</small></label><input id="tm" placeholder="S, M, L" value="${esc((v.Tamaño || []).join(", "))}"></div></div><div id="cm" style="display:grid;gap:8px"></div></section>
+<section class="cd"><h3>4. Fotos y videos</h3>
+<label class="lbl">Fotos <small>(la #1 es la principal)</small></label><input id="fi" type="file" accept="image/*" multiple><div class="thumbs" id="ti"></div>
 <label class="lbl">Videos <small>(sube un archivo o pega un link de YouTube)</small></label><input id="fv" type="file" accept="video/*">
-<div style="display:flex;gap:8px"><input id="yu" placeholder="https://youtube.com/..."><button type="button" class="btn b3" id="ya">Agregar</button></div><div class="thumbs" id="tv"></div>
+<div style="display:flex;gap:8px"><input id="yu" placeholder="https://youtube.com/..."><button type="button" class="btn b3" id="ya">Agregar</button></div><div class="thumbs" id="tv"></div></section>
+<section class="cd"><h3>5. Reseñas y publicación</h3>
+<label class="lbl">Reseñas reales <small>(una por línea: Nombre | comentario)</small></label><textarea id="r" rows="4">${esc((p.reviews || []).map(r => r.name + " | " + r.text).join("\n"))}</textarea>
 <label class="ck"><input type="checkbox" id="ac" ${p.active !== false ? "checked" : ""}> Visible en la tienda</label>
-<label class="ck"><input type="checkbox" id="ft" ${p.featured ? "checked" : ""}> Producto destacado (sale en el inicio)</label>
-<p id="msg"></p><div><button class="btn b1" id="sv">GUARDAR PRODUCTO</button> <button type="button" class="btn b3" id="cn">Cancelar</button></div></form>`;
-  thumbs(); $("#cn").onclick = load;
+<label class="ck"><input type="checkbox" id="ft" ${p.featured ? "checked" : ""}> Producto destacado (sale en el inicio)</label></section>
+<div class="bar2"><p id="msg"></p><button class="btn b1" id="sv">GUARDAR PRODUCTO</button></div></form>`;
+  thumbs(); $("#cn").onclick = load; $("#co").oninput = cmap; $("#cm").onchange = e => { const s = e.target; if (s.dataset.cm) s.nextElementSibling.src = cur.images[s.value]; };
   $("#fi").onchange = e => add(e.target, "images"); $("#fv").onchange = e => add(e.target, "videos");
   $("#ya").onclick = () => { const u = $("#yu").value.trim(); if (u) { cur.videos.push(u); $("#yu").value = ""; thumbs(); } };
   $("#pf").onsubmit = save;
 }
+// Editor de la cinta de ofertas (se guarda en Firestore: settings/promo)
+async function promoForm() {
+  let P = { enabled: true, messages: ["⚡ OFERTA RELÁMPAGO · PELUDITOS AL DÍA"], theme: "oferta", endsAt: "" };
+  try { const d = await F.getDoc(F.doc(db, "settings", "promo")); if (d.exists()) P = { ...P, ...d.data() }; } catch {}
+  const s = document.createElement("section"); s.className = "cd"; s.style.marginTop = "24px";
+  s.innerHTML = `<h3>📣 Cinta de ofertas <small>(aparece arriba de toda la tienda)</small></h3>
+<label class="ck"><input type="checkbox" id="pe" ${P.enabled ? "checked" : ""}> Mostrar la cinta</label>
+<label class="lbl">Mensajes <small>(uno por línea. Ej: 🎃 HALLOWEEN: 20% en todo)</small></label><textarea id="pm" rows="4">${esc((P.messages || []).join("\n"))}</textarea>
+<div class="g2"><div><label class="lbl">Estilo</label><select id="pt">${[["oferta", "Oferta (rojo)"], ["halloween", "Halloween"], ["navidad", "Navidad"], ["verde", "Verde de la marca"]].map(([v, n]) => `<option value="${v}" ${P.theme === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+<div><label class="lbl">Termina el <small>(opcional: muestra cuenta regresiva)</small></label><input id="pd" type="datetime-local" value="${esc(P.endsAt)}"></div></div>
+<div><button class="btn b1" id="ps">Guardar cinta</button> <small id="pg"></small></div>`;
+  app.appendChild(s);
+  $("#ps").onclick = async () => {
+    try { await F.setDoc(F.doc(db, "settings", "promo"), { enabled: $("#pe").checked, messages: $("#pm").value.split("\n").map(x => x.trim()).filter(Boolean), theme: $("#pt").value, endsAt: $("#pd").value, updatedAt: new Date().toISOString() }); $("#pg").textContent = "✅ Guardada"; }
+    catch { $("#pg").textContent = "No se pudo guardar. ¿Agregaste la regla de settings?"; }
+  };
+}
 function thumbs() {
-  ["images", "videos"].forEach((k, j) => $(j ? "#tv" : "#ti").innerHTML = cur[k].map((u, i) => `<div>${j ? (yt(u) ? `<img src="https://i.ytimg.com/vi/${yt(u)}/default.jpg" alt="">` : `<video src="${esc(u)}" muted></video>`) : `<img src="${esc(u)}" alt="">`}<b data-rm="${k}:${i}">×</b></div>`).join(""));
+  ["images", "videos"].forEach((k, j) => $(j ? "#tv" : "#ti").innerHTML = cur[k].map((u, i) => `<div>${j ? (yt(u) ? `<img src="https://i.ytimg.com/vi/${yt(u)}/default.jpg" alt="">` : `<video src="${esc(u)}" muted></video>`) : `<img src="${esc(u)}" alt=""><i>#${i + 1}</i>`}<b data-rm="${k}:${i}">×</b></div>`).join(""));
+  cmap();
+}
+// Foto que se muestra al elegir cada color
+function cmap() {
+  const cs = $("#co").value.split(",").map(s => s.trim()).filter(Boolean); cur.colorImages = cur.colorImages || {};
+  $("#cm").innerHTML = cs.length && cur.images.length ? `<label class="lbl">Foto de cada color <small>(al elegir el color, la tienda muestra esta foto)</small></label>` + cs.map((c, n) => { const i = cur.colorImages[c] ?? (n < cur.images.length ? n : 0); return `<div class="cmr"><b>${esc(c)}</b><select data-cm="${esc(c)}">${cur.images.map((u, k) => `<option value="${k}" ${k == i ? "selected" : ""}>Foto #${k + 1}</option>`).join("")}</select><img src="${esc(cur.images[i])}" alt=""></div>`; }).join("") : "";
 }
 // Subida a Cloudinary (preset "unsigned"): fotos y videos
 async function up(f) {
@@ -82,9 +126,10 @@ async function save(e) {
   const slug = cur.slug || g("#n").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const variants = {}; if (csv("#co").length) variants.Color = csv("#co"); if (csv("#tm").length) variants.Tamaño = csv("#tm");
   const reviews = g("#r").split("\n").map(l => l.split("|")).filter(a => a.length > 1).map(a => ({ name: a[0].trim(), text: a.slice(1).join("|").trim() }));
+  const ci = {}; document.querySelectorAll("[data-cm]").forEach(s => ci[s.dataset.cm] = +s.value);
   const data = { id: slug, slug, name: g("#n"), short: g("#s"), description: g("#d"), price: +g("#pr"), oldPrice: +g("#po") || 0, category: g("#c") || "General",
     stock: g("#st") === "" ? null : +g("#st"), variants, benefits: g("#b").split("\n").map(s => s.trim()).filter(Boolean), features: cur.features || [], reviews,
-    images: cur.images, videos: cur.videos, active: $("#ac").checked, featured: $("#ft").checked, updatedAt: new Date().toISOString() };
+    images: cur.images, videos: cur.videos, colorImages: ci, active: $("#ac").checked, featured: $("#ft").checked, updatedAt: new Date().toISOString() };
   if (!data.images.length && !confirm("No agregaste fotos. ¿Guardar así?")) return;
   $("#sv").disabled = true;
   try { await F.setDoc(F.doc(db, "products", slug), data); load(); } catch { $("#msg").textContent = "No se pudo guardar. Revisa permisos."; $("#sv").disabled = false; }

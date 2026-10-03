@@ -4,7 +4,7 @@ const $ = s => document.querySelector(s), app = $("#app");
 const money = n => new Intl.NumberFormat("es-CO", { style: "currency", currency: CONFIG.CURRENCY, maximumFractionDigits: 0 }).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const waLink = t => `https://wa.me/${CONFIG.WHATSAPP_NUMBER}?text=${encodeURIComponent(t)}`;
-let products = PRODUCTS.filter(p => p.active), db = null, fs = null;
+let products = PRODUCTS.filter(p => p.active), db = null, fs = null, promoCfg = null;
 let cart = JSON.parse(localStorage.getItem("cart") || "[]");
 const save = () => { localStorage.setItem("cart", JSON.stringify(cart)); $("#cc").textContent = cart.reduce((a, i) => a + i.qty, 0); };
 const toast = m => { const t = $("#toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 1800); };
@@ -20,10 +20,11 @@ async function initFirebase() {
     fs = f; db = f.getFirestore(initializeApp(CONFIG.FIREBASE));
     const snap = await f.getDocs(f.query(f.collection(db, "products"), f.where("active", "==", true)));
     if (!snap.empty) products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try { const sd = await f.getDoc(f.doc(db, "settings", "promo")); if (sd.exists()) promoCfg = sd.data(); } catch {}
   } catch (e) { console.warn("Firebase no disponible, usando catálogo local", e); }
 }
 const card = p => `<a class="card" href="#/p/${esc(p.slug || p.id)}">${p.oldPrice > p.price && p.price ? `<span class="tag">-${Math.round(100 - p.price / p.oldPrice * 100)}%</span>` : ""}
-<img loading="lazy" src="${esc(p.images?.[0])}" alt="${esc(p.name)}"><div class="in"><b>${esc(p.name)}</b><p>${esc(p.short)}</p>
+<img loading="lazy" src="${esc(p.images?.[0])}" alt="${esc(p.name)}"><div class="in"><small class="cat">${esc(p.category || "")}</small><br><b>${esc(p.name)}</b><p>${esc(p.short)}</p><p class="stk">${p.stock === 0 ? "❌ Agotado" : p.stock > 0 ? `📦 ${p.stock} disponibles` : "✅ Disponible"}</p>
 <span class="price">${p.price ? money(p.price) : "Precio por definir"}</span>${p.oldPrice > p.price ? `<span class="old">${money(p.oldPrice)}</span>` : ""}
 <br><br><span class="btn b2">Ver producto</span></div></a>`;
 const trust = `<div class="trust">🚚 Envíos a toda Colombia<br>📦 Pago contra entrega disponible<br>🔒 Pago seguro con Wompi</div>`;
@@ -39,7 +40,7 @@ const views = {
 <h1>Todo lo que tu peludito necesita, en un solo lugar.</h1><p>Accesorios y productos seleccionados para hacer la vida de tu perro más cómoda, segura y divertida.</p>
 <a class="btn b1" href="#/p/${esc(f?.slug || f?.id)}">COMPRAR AHORA</a> <a class="btn b3" href="#/productos">VER PRODUCTOS</a></div>
 <img src="${esc(f?.images?.[0])}" alt="${esc(f?.name)}"></div></section>
-<div class="ben"><div>🐶<br>Productos para tu peludito</div><div>🚚<br>Envíos a toda Colombia</div><div>💳<br>Pago seguro con Wompi</div><div>📦<br>Pago contra entrega</div></div>
+<div class="ben"><figure class="bn"><img src="public/images/b-productos.webp" alt="Productos para tu peludito" loading="lazy"></figure><figure class="bn"><img src="public/images/b-envios.webp" alt="Envíos a toda Colombia" loading="lazy"></figure><figure class="bn"><img src="public/images/b-wompi.webp" alt="Paga seguro con Wompi: Nequi, PSE, Bancolombia y tarjetas" loading="lazy"></figure><figure class="bn"><img src="public/images/b-contra.webp" alt="Paga contra entrega y en efectivo" loading="lazy"></figure></div>
 <h2>Nuestros productos</h2><div class="grid">${products.map(card).join("")}</div>`;
   },
   productos() {
@@ -54,10 +55,14 @@ const views = {
     window._pd = { p, sel, qty: 1 };
     const rel = products.filter(x => x.category === p.category && x.id !== p.id);
     return `<div class="pd"><div><div id="mm"></div><div class="th">${media(p).map((m, n) => m.v ? `<button type="button" onclick="sm(${n})" aria-label="Ver video" style="width:64px;height:64px;flex:none;border:0;border-radius:10px;background:var(--g);color:#fff;font-size:22px;cursor:pointer">▶</button>` : `<img loading="lazy" src="${esc(m.u)}" alt="" onclick="sm(${n})">`).join("")}</div></div>
-<div><h1>${esc(p.name)}</h1><p>${esc(p.description)}</p>
-<p class="price" style="font-size:28px">${p.price ? money(p.price) : "Precio por definir"}${p.oldPrice > p.price ? `<span class="old">${money(p.oldPrice)}</span>` : ""}</p>
-<ul style="margin:10px 0 10px 20px">${[...(p.benefits || []), ...(p.features || [])].map(b => `<li>${esc(b)}</li>`).join("")}</ul>
-${Object.entries(p.variants || {}).map(([k, v]) => `<div><b>${esc(k)}:</b><br>${v.map((o, i) => `<span class="chip ${i ? "" : "on"}" data-k="${esc(k)}" data-v="${esc(o)}">${esc(o)}</span>`).join("")}</div>`).join("")}
+<div class="info"><div class="crumb"><a href="#/">Inicio</a> › <a href="#/productos?c=${encodeURIComponent(p.category || "")}">${esc(p.category || "General")}</a></div>
+<h1>${esc(p.name)}</h1>${p.short ? `<p class="sub">${esc(p.short)}</p>` : ""}
+<div class="pbox"><span class="price big">${p.price ? money(p.price) : "Precio por definir"}</span>${p.oldPrice > p.price ? `<span class="old">${money(p.oldPrice)}</span><span class="save">-${Math.round(100 - p.price / p.oldPrice * 100)}% · Ahorras ${money(p.oldPrice - p.price)}</span>` : ""}</div>
+<div class="meta"><span class="pill">🏷 ${esc(p.category || "General")}</span><span class="pill ${p.stock === 0 ? "no" : "ok"}">${p.stock === 0 ? "❌ Agotado" : p.stock > 0 ? `✅ Disponible · ${p.stock} unidades` : "✅ Disponible"}</span></div>
+${p.description ? `<h3>Descripción</h3><p class="desc">${esc(p.description)}</p>` : ""}
+${p.benefits?.length ? `<h3>Beneficios</h3><ul class="chk">${p.benefits.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+${p.features?.length ? `<h3>Características</h3><ul class="chk">${p.features.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+${Object.entries(p.variants || {}).map(([k, v]) => `<div class="vr"><b>${esc(k)}:</b> <span class="vl">${esc(v[0])}</span><br>${v.map((o, i) => `<span class="chip ${i ? "" : "on"}" data-k="${esc(k)}" data-v="${esc(o)}">${esc(o)}</span>`).join("")}</div>`).join("")}
 <div class="qty"><button data-q="-1">−</button><b id="q">1</b><button data-q="1">+</button></div><br>
 <button class="btn b1" data-act="buy" ${p.price && p.stock !== 0 ? "" : "disabled"}>COMPRAR AHORA</button> <button class="btn b3" data-act="add" ${p.price && p.stock !== 0 ? "" : "disabled"}>AGREGAR AL CARRITO</button>${p.stock === 0 ? '<p><b>😔 Agotado por ahora</b></p>' : ''}${trust}</div></div>
 ${p.reviews?.length ? `<h2>Lo que dicen nuestros clientes</h2><div class="grid">${p.reviews.map(r => `<div class="rev">⭐⭐⭐⭐⭐<p>${esc(r.text)}</p><b>${esc(r.name)}</b></div>`).join("")}</div>` : ""}
@@ -115,16 +120,16 @@ async function placeOrder(f) {
 
 function route() {
   const [, r = "", arg] = location.hash.replace("#", "").split("?")[0].split("/");
-  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if ($("#mm")) sm(0);
+  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if ($("#mm")) sm(window._pd.p.colorImages?.[window._pd.sel.Color] ?? 0);
   const f = $("#ck"); if (f) f.onsubmit = async e => { e.preventDefault(); $("#sb").disabled = true; try { await placeOrder(f); } catch (x) { toast("Error al enviar el pedido. Intenta de nuevo."); } $("#sb") && ($("#sb").disabled = false); };
 }
 document.addEventListener("click", e => {
   const t = e.target, pd = window._pd;
-  if (t.dataset.v) { pd.sel[t.dataset.k] = t.dataset.v; t.parentNode.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === t)); }
+  if (t.dataset.v) { pd.sel[t.dataset.k] = t.dataset.v; t.parentNode.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === t)); const l = t.parentNode.querySelector(".vl"); if (l) l.textContent = t.dataset.v; const ci = pd.p.colorImages?.[t.dataset.v]; if (t.dataset.k === "Color" && ci !== undefined) sm(+ci); }
   if (t.dataset.q) { pd.qty = Math.max(1, pd.qty + +t.dataset.q); $("#q").textContent = pd.qty; }
   if (t.dataset.act) {
     const { p, sel, qty } = pd, variant = Object.values(sel).join(" / ") || "Único", key = p.id + variant, ex = cart.find(i => i.key === key);
-    ex ? ex.qty += qty : cart.push({ key, id: p.id, name: p.name, variant, price: p.price, qty, image: p.images[0] });
+    ex ? ex.qty += qty : cart.push({ key, id: p.id, name: p.name, variant, price: p.price, qty, image: p.images[p.colorImages?.[sel.Color] ?? 0] || p.images[0] });
     save(); track("add_to_cart", { item_id: p.id, value: p.price * qty });
     t.dataset.act === "buy" ? location.hash = "#/checkout" : toast("Agregado al carrito 🐶");
   }
@@ -133,6 +138,23 @@ document.addEventListener("click", e => {
 });
 // Enlaces configurables
 $("#wa").href = waLink("Hola, Peluditos al Día. Quiero información.");
-$("#social").innerHTML = [["Instagram", CONFIG.INSTAGRAM_URL], ["TikTok", CONFIG.TIKTOK_URL], ["Facebook", CONFIG.FACEBOOK_URL], ["YouTube", CONFIG.YOUTUBE_URL]].filter(s => s[1]).map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${n}</a>`).join("");
+const ICONS = {
+  Instagram: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.3"/></svg>',
+  TikTok: '<svg viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>',
+  Facebook: '<svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
+  YouTube: '<svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>'
+};
+$("#social").innerHTML = [["Instagram", CONFIG.INSTAGRAM_URL], ["TikTok", CONFIG.TIKTOK_URL], ["Facebook", CONFIG.FACEBOOK_URL], ["YouTube", CONFIG.YOUTUBE_URL]].map(([n, u]) => `<a ${u ? `href="${esc(u)}" target="_blank" rel="noopener"` : 'style="opacity:.4;pointer-events:none"'} aria-label="${n}">${ICONS[n]}</a>`).join("");
+// Cinta promocional dinámica (opcional: CONFIG.PROMO = { enabled, messages: [], endsAt: "2026-10-10T23:59:00-05:00" })
+const DEFAULT_PROMO = { enabled: true, messages: ["⚡ OFERTA RELÁMPAGO · PELUDITOS AL DÍA", "🚚 Envíos a toda Colombia", "📦 Paga al recibir con contra entrega · 💳 Pago seguro con Wompi"] };
+const renderPromo = P => {
+  P = P || CONFIG.PROMO || DEFAULT_PROMO;
+  if (!P.enabled || !P.messages?.length) return $("#promo").remove();
+  $("#promo").dataset.theme = P.theme || "oferta";
+  const end = P.endsAt ? new Date(P.endsAt).getTime() : 0, live = end > Date.now();
+  $("#promo .mq").innerHTML = (P.messages.map(m => `<span>${esc(m)}</span>`).join("") + (live ? `<span>⏳ Termina en <b class="cdn"></b></span>` : "")).repeat(6);
+  const f = n => String(n).padStart(2, "0"), tick = () => { const s = Math.max(0, Math.floor((end - Date.now()) / 1000)), d = Math.floor(s / 86400); document.querySelectorAll(".cdn").forEach(e => e.textContent = (d ? d + "d " : "") + f(Math.floor(s % 86400 / 3600)) + ":" + f(Math.floor(s % 3600 / 60)) + ":" + f(s % 60)); };
+  if (live) { tick(); setInterval(tick, 1000); }
+};
 addEventListener("hashchange", route); save();
-initFirebase().finally(route);
+initFirebase().finally(() => { route(); renderPromo(promoCfg); });
