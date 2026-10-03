@@ -41,8 +41,8 @@ footer{background:var(--gd);color:#fff;margin-top:40px;padding:30px 0}footer a{d
 nav{display:none;position:absolute;top:64px;left:0;right:0;background:#fff;flex-direction:column;padding:16px;margin:0;box-shadow:0 8px 12px #0001}nav.open{display:flex}.bar{gap:4px}.bar .cartbtn{margin-left:auto}}
 /* v2: cinta, beneficios, producto, footer */
 .promo{background:linear-gradient(90deg,var(--r),#ff7a18);color:#fff;font-weight:800;font-size:14px;overflow:hidden;white-space:nowrap}
-.mq{display:inline-flex;padding:8px 0;animation:mq 40s linear infinite}.mq span{padding:0 34px}.promo:hover .mq{animation-play-state:paused}
-@keyframes mq{to{transform:translateX(-50%)}}@media(prefers-reduced-motion:reduce){.mq{animation:none}}
+.mq{display:flex;width:max-content;will-change:transform;padding:8px 0;animation:mq 40s linear infinite}.mq span{padding:0 34px}.promo:hover .mq{animation-play-state:paused}
+@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .ben{grid-template-columns:repeat(4,1fr)}.bn{margin:0}.bn img{width:100%;aspect-ratio:2/1;object-fit:cover;border-radius:var(--rad);box-shadow:0 3px 12px #0002;transition:.2s}.bn img:hover{transform:translateY(-3px)}
 .bn4{aspect-ratio:2/1;border-radius:var(--rad);background:linear-gradient(135deg,var(--g),#2fb457);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:clamp(14px,1.8vw,19px);padding:8px;box-shadow:0 3px 12px #0002}.bn4 span{font-size:34px}
 .info h1{font-size:clamp(24px,3.5vw,34px);margin:4px 0}.crumb{font-size:14px;color:var(--m)}.crumb a:hover{color:var(--g)}.sub{color:var(--m);font-size:17px;margin-bottom:12px}
