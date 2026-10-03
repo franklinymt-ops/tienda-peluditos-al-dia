@@ -28,6 +28,10 @@ const card = p => `<a class="card" href="#/p/${esc(p.slug || p.id)}">${p.oldPric
 <br><br><span class="btn b2">Ver producto</span></div></a>`;
 const trust = `<div class="trust">🚚 Envíos a toda Colombia<br>📦 Pago contra entrega disponible<br>🔒 Pago seguro con Wompi</div>`;
 
+// Galería: fotos + videos (YouTube o archivo)
+const yt = u => (u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/) || [])[1];
+const media = p => [...(p.images || []).map(u => ({ v: 0, u })), ...(p.videos || []).map(u => ({ v: 1, u }))];
+window.sm = n => { const m = media(window._pd.p)[n]; if (!m) return; $("#mm").innerHTML = !m.v ? `<img class="main" src="${esc(m.u)}" alt="${esc(window._pd.p.name)}">` : yt(m.u) ? `<iframe class="main" src="https://www.youtube.com/embed/${yt(m.u)}" allowfullscreen loading="lazy" style="border:0"></iframe>` : `<video class="main" src="${esc(m.u)}" controls playsinline preload="metadata" style="object-fit:contain;background:#000"></video>`; };
 const views = {
   home() {
     const f = products.find(p => p.featured) || products[0];
@@ -49,14 +53,13 @@ const views = {
     const sel = {}; Object.entries(p.variants || {}).forEach(([k, v]) => sel[k] = v[0]);
     window._pd = { p, sel, qty: 1 };
     const rel = products.filter(x => x.category === p.category && x.id !== p.id);
-    return `<div class="pd"><div><img class="main" id="mi" src="${esc(p.images[0])}" alt="${esc(p.name)}">
-<div class="th">${p.images.map(i => `<img loading="lazy" src="${esc(i)}" alt="" onclick="mi.src='${esc(i)}'">`).join("")}</div></div>
+    return `<div class="pd"><div><div id="mm"></div><div class="th">${media(p).map((m, n) => m.v ? `<button type="button" onclick="sm(${n})" aria-label="Ver video" style="width:64px;height:64px;flex:none;border:0;border-radius:10px;background:var(--g);color:#fff;font-size:22px;cursor:pointer">▶</button>` : `<img loading="lazy" src="${esc(m.u)}" alt="" onclick="sm(${n})">`).join("")}</div></div>
 <div><h1>${esc(p.name)}</h1><p>${esc(p.description)}</p>
 <p class="price" style="font-size:28px">${p.price ? money(p.price) : "Precio por definir"}${p.oldPrice > p.price ? `<span class="old">${money(p.oldPrice)}</span>` : ""}</p>
 <ul style="margin:10px 0 10px 20px">${[...(p.benefits || []), ...(p.features || [])].map(b => `<li>${esc(b)}</li>`).join("")}</ul>
 ${Object.entries(p.variants || {}).map(([k, v]) => `<div><b>${esc(k)}:</b><br>${v.map((o, i) => `<span class="chip ${i ? "" : "on"}" data-k="${esc(k)}" data-v="${esc(o)}">${esc(o)}</span>`).join("")}</div>`).join("")}
 <div class="qty"><button data-q="-1">−</button><b id="q">1</b><button data-q="1">+</button></div><br>
-<button class="btn b1" data-act="buy" ${p.price ? "" : "disabled"}>COMPRAR AHORA</button> <button class="btn b3" data-act="add" ${p.price ? "" : "disabled"}>AGREGAR AL CARRITO</button>${trust}</div></div>
+<button class="btn b1" data-act="buy" ${p.price && p.stock !== 0 ? "" : "disabled"}>COMPRAR AHORA</button> <button class="btn b3" data-act="add" ${p.price && p.stock !== 0 ? "" : "disabled"}>AGREGAR AL CARRITO</button>${p.stock === 0 ? '<p><b>😔 Agotado por ahora</b></p>' : ''}${trust}</div></div>
 ${p.reviews?.length ? `<h2>Lo que dicen nuestros clientes</h2><div class="grid">${p.reviews.map(r => `<div class="rev">⭐⭐⭐⭐⭐<p>${esc(r.text)}</p><b>${esc(r.name)}</b></div>`).join("")}</div>` : ""}
 ${rel.length ? `<h2>También puede interesarte</h2><div class="grid">${rel.map(card).join("")}</div>` : ""}`;
   },
@@ -112,7 +115,7 @@ async function placeOrder(f) {
 
 function route() {
   const [, r = "", arg] = location.hash.replace("#", "").split("?")[0].split("/");
-  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open");
+  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if ($("#mm")) sm(0);
   const f = $("#ck"); if (f) f.onsubmit = async e => { e.preventDefault(); $("#sb").disabled = true; try { await placeOrder(f); } catch (x) { toast("Error al enviar el pedido. Intenta de nuevo."); } $("#sb") && ($("#sb").disabled = false); };
 }
 document.addEventListener("click", e => {

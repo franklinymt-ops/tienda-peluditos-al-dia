@@ -1,0 +1,92 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Admin · Peluditos al Día</title><link rel="stylesheet" href="styles.css">
+<style>.wrap{padding-bottom:60px}.lbl{font-weight:700;margin-top:6px}.thumbs{display:flex;gap:8px;flex-wrap:wrap}.thumbs div{position:relative}.thumbs img,.thumbs video{width:80px;height:80px;object-fit:cover;border-radius:10px}.thumbs b{position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;cursor:pointer}.ck{display:flex;gap:8px;align-items:center}.ck input{width:auto}small{color:var(--m);font-weight:400}</style></head>
+<body><header><div class="wrap bar"><img src="public/images/logo.png" alt=""><b>Panel de administración</b><button class="btn b3" id="out" style="margin-left:auto;display:none">Salir</button></div></header>
+<main class="wrap" id="app"></main>
+<script type="module">
+import { CONFIG as C } from "./config.js";
+const $ = s => document.querySelector(s), app = $("#app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = n => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+if (!C.FIREBASE.projectId) { app.innerHTML = "<h2>Falta configurar Firebase en config.js</h2>"; throw 0; }
+const V = "https://www.gstatic.com/firebasejs/10.12.0/";
+const [{ initializeApp }, A, F] = await Promise.all([import(V + "firebase-app.js"), import(V + "firebase-auth.js"), import(V + "firebase-firestore.js")]);
+const auth = A.getAuth(initializeApp(C.FIREBASE)), db = F.getFirestore(auth.app);
+let list = [], cur = null;
+const yt = u => (u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/) || [])[1];
+$("#out").onclick = () => A.signOut(auth);
+A.onAuthStateChanged(auth, u => { $("#out").style.display = u ? "" : "none"; u ? load() : login(); });
+
+function login() {
+  app.innerHTML = `<h2>Ingresar</h2><form id="lf" style="max-width:360px"><input id="em" type="email" placeholder="Correo" required><input id="pw" type="password" placeholder="Contraseña" required><button class="btn b1">ENTRAR</button><p id="er" style="color:var(--r)"></p></form>`;
+  $("#lf").onsubmit = async e => { e.preventDefault(); try { await A.signInWithEmailAndPassword(auth, $("#em").value, $("#pw").value); } catch { $("#er").textContent = "Correo o contraseña incorrectos"; } };
+}
+async function load() {
+  try { list = (await F.getDocs(F.collection(db, "products"))).docs.map(d => ({ id: d.id, ...d.data() })); }
+  catch { app.innerHTML = "<h2>Sin permiso</h2><p>Revisa que tu correo esté en las reglas de Firestore.</p>"; return; }
+  app.innerHTML = `<h2>Mis productos</h2><button class="btn b1" id="nw">+ NUEVO PRODUCTO</button><br><br>` + (list.map(p => `<div class="row"><img src="${esc(p.images?.[0])}" alt=""><div style="flex:1"><b>${esc(p.name)}</b><br>${p.price ? money(p.price) : "Sin precio"} · ${p.active ? "✅ Visible" : "⏸ Oculto"}</div><button class="btn b3" data-e="${esc(p.id)}">Editar</button> <button class="btn b3" data-x="${esc(p.id)}">🗑</button></div>`).join("") || "<p>Aún no hay productos. ¡Crea el primero!</p>");
+  $("#nw").onclick = () => form({ images: [], videos: [], active: true });
+}
+app.onclick = async e => {
+  const t = e.target, p = list.find(x => x.id === (t.dataset.e || t.dataset.x));
+  if (t.dataset.e && p) form(structuredClone(p));
+  if (t.dataset.x && p && confirm("¿Eliminar «" + p.name + "»?")) { await F.deleteDoc(F.doc(db, "products", p.id)); load(); }
+  if (t.dataset.rm) { const [k, i] = t.dataset.rm.split(":"); cur[k].splice(+i, 1); thumbs(); }
+};
+function form(p) {
+  p.images = p.images || []; p.videos = p.videos || []; cur = p; const v = p.variants || {};
+  app.innerHTML = `<h2>${p.id ? "Editar" : "Nuevo"} producto</h2><form id="pf">
+<label class="lbl">Nombre</label><input id="n" required value="${esc(p.name)}">
+<label class="lbl">Frase corta <small>(se ve en la tarjeta)</small></label><input id="s" value="${esc(p.short)}">
+<label class="lbl">Descripción</label><textarea id="d" rows="4">${esc(p.description)}</textarea>
+<div class="two"><div><label class="lbl">Precio (COP)</label><input id="pr" type="number" min="1" required value="${p.price || ""}"></div>
+<div><label class="lbl">Precio anterior <small>(opcional, muestra el descuento)</small></label><input id="po" type="number" min="0" value="${p.oldPrice || ""}"></div></div>
+<div class="two"><div><label class="lbl">Categoría</label><input id="c" list="cl" value="${esc(p.category)}"><datalist id="cl">${[...new Set(list.map(x => x.category).filter(Boolean))].map(c => `<option>${esc(c)}`).join("")}</datalist></div>
+<div><label class="lbl">Stock <small>(vacío = sin control, 0 = agotado)</small></label><input id="st" type="number" min="0" value="${p.stock ?? ""}"></div></div>
+<div class="two"><div><label class="lbl">Colores <small>(separados por coma)</small></label><input id="co" placeholder="Azul, Amarillo" value="${esc((v.Color || []).join(", "))}"></div>
+<div><label class="lbl">Tamaños <small>(separados por coma)</small></label><input id="tm" placeholder="S, M, L" value="${esc((v.Tamaño || []).join(", "))}"></div></div>
+<label class="lbl">Beneficios <small>(uno por línea)</small></label><textarea id="b" rows="3">${esc((p.benefits || []).join("\n"))}</textarea>
+<label class="lbl">Reseñas reales <small>(una por línea: Nombre | comentario)</small></label><textarea id="r" rows="3">${esc((p.reviews || []).map(r => r.name + " | " + r.text).join("\n"))}</textarea>
+<label class="lbl">Fotos</label><input id="fi" type="file" accept="image/*" multiple><div class="thumbs" id="ti"></div>
+<label class="lbl">Videos <small>(sube un archivo o pega un link de YouTube)</small></label><input id="fv" type="file" accept="video/*">
+<div style="display:flex;gap:8px"><input id="yu" placeholder="https://youtube.com/..."><button type="button" class="btn b3" id="ya">Agregar</button></div><div class="thumbs" id="tv"></div>
+<label class="ck"><input type="checkbox" id="ac" ${p.active !== false ? "checked" : ""}> Visible en la tienda</label>
+<label class="ck"><input type="checkbox" id="ft" ${p.featured ? "checked" : ""}> Producto destacado (sale en el inicio)</label>
+<p id="msg"></p><div><button class="btn b1" id="sv">GUARDAR PRODUCTO</button> <button type="button" class="btn b3" id="cn">Cancelar</button></div></form>`;
+  thumbs(); $("#cn").onclick = load;
+  $("#fi").onchange = e => add(e.target, "images"); $("#fv").onchange = e => add(e.target, "videos");
+  $("#ya").onclick = () => { const u = $("#yu").value.trim(); if (u) { cur.videos.push(u); $("#yu").value = ""; thumbs(); } };
+  $("#pf").onsubmit = save;
+}
+function thumbs() {
+  ["images", "videos"].forEach((k, j) => $(j ? "#tv" : "#ti").innerHTML = cur[k].map((u, i) => `<div>${j ? (yt(u) ? `<img src="https://i.ytimg.com/vi/${yt(u)}/default.jpg" alt="">` : `<video src="${esc(u)}" muted></video>`) : `<img src="${esc(u)}" alt="">`}<b data-rm="${k}:${i}">×</b></div>`).join(""));
+}
+// Subida a Cloudinary (preset "unsigned"): fotos y videos
+async function up(f) {
+  if (!C.CLOUDINARY_CLOUD_NAME) throw new Error("Falta configurar Cloudinary en config.js");
+  const t = f.type.startsWith("video") ? "video" : "image", fd = new FormData();
+  fd.append("file", f); fd.append("upload_preset", C.CLOUDINARY_UPLOAD_PRESET);
+  const j = await (await fetch(`https://api.cloudinary.com/v1_1/${C.CLOUDINARY_CLOUD_NAME}/${t}/upload`, { method: "POST", body: fd })).json();
+  if (!j.secure_url) throw new Error(j.error?.message || "No se pudo subir");
+  return j.secure_url.replace("/upload/", t === "image" ? "/upload/f_auto,q_auto,w_1000/" : "/upload/f_auto,q_auto/");
+}
+async function add(inp, k) {
+  const m = $("#msg");
+  for (const f of inp.files) { m.textContent = "Subiendo " + f.name + "…"; try { cur[k].push(await up(f)); } catch (x) { m.textContent = "Error: " + x.message; return; } }
+  m.textContent = ""; inp.value = ""; thumbs();
+}
+async function save(e) {
+  e.preventDefault();
+  const g = i => $(i).value.trim(), csv = i => g(i).split(",").map(s => s.trim()).filter(Boolean);
+  const slug = cur.slug || g("#n").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const variants = {}; if (csv("#co").length) variants.Color = csv("#co"); if (csv("#tm").length) variants.Tamaño = csv("#tm");
+  const reviews = g("#r").split("\n").map(l => l.split("|")).filter(a => a.length > 1).map(a => ({ name: a[0].trim(), text: a.slice(1).join("|").trim() }));
+  const data = { id: slug, slug, name: g("#n"), short: g("#s"), description: g("#d"), price: +g("#pr"), oldPrice: +g("#po") || 0, category: g("#c") || "General",
+    stock: g("#st") === "" ? null : +g("#st"), variants, benefits: g("#b").split("\n").map(s => s.trim()).filter(Boolean), features: cur.features || [], reviews,
+    images: cur.images, videos: cur.videos, active: $("#ac").checked, featured: $("#ft").checked, updatedAt: new Date().toISOString() };
+  if (!data.images.length && !confirm("No agregaste fotos. ¿Guardar así?")) return;
+  $("#sv").disabled = true;
+  try { await F.setDoc(F.doc(db, "products", slug), data); load(); } catch { $("#msg").textContent = "No se pudo guardar. Revisa permisos."; $("#sv").disabled = false; }
+}
+</script></body></html>
