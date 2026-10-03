@@ -8,7 +8,7 @@ export const PRODUCTS = [{
   price: 29900, oldPrice: 29900, // PLACEHOLDER: define el precio en COP
   category: "Higiene", tags: ["baño", "higiene"],
   images: ["public/images/p1.avif", "public/images/p2.avif", "public/images/p3.avif", "public/images/p4.avif"],
-  variants: { Color: ["Azul", "Amarillo"] }, stock: null, // null = sin control de inventario
+  variants: { Color: ["Azul", "Amarillo", "Rosa"] }, stock: null, // null = sin control de inventario
   benefits: ["Hace mucha espuma", "Goma suave que masajea", "Guarda el champú dentro"],
   features: ["Para perros y gatos", "Material de goma duradero", "Fácil de limpiar"],
   reviews: [
