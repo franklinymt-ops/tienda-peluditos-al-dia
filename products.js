@@ -5,7 +5,7 @@ export const PRODUCTS = [{
   name: "Cepillo de baño con depósito para champú",
   short: "Más espuma, masaje suave y baños sin estrés.",
   description: "Cepillo de goma suave con ranura para guardar el champú. Masajea, hace espuma y limpia el pelaje de perros y gatos mientras tu peludito se relaja.",
-  price: 0, oldPrice: 0, // PLACEHOLDER: define el precio en COP
+  price: 29900, oldPrice: 29900, // PLACEHOLDER: define el precio en COP
   category: "Higiene", tags: ["baño", "higiene"],
   images: ["public/images/p1.avif", "public/images/p2.avif", "public/images/p3.avif", "public/images/p4.avif"],
   variants: { Color: ["Azul", "Amarillo"] }, stock: null, // null = sin control de inventario
