@@ -67,8 +67,8 @@ const views = {
     window._pd = { p, sel, qty: 1, cur: 0 };
     const rel = products.filter(x => x.category === p.category && x.id !== p.id), M = media(p), off = !p.price || p.stock === 0;
     const list = (t, a) => a?.length ? `<h3>${t}</h3><ul class="chk">${a.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : "";
-    return `<div class="pd"><div class="gal"><div class="sl" id="sl">${M.map((m, n) => `<div class="sd">${slide(m, p.name, n)}</div>`).join("")}</div>
-${M.length > 1 ? `<button type="button" class="ar l" data-s="-1" aria-label="Anterior">‹</button><button type="button" class="ar r" data-s="1" aria-label="Siguiente">›</button><span class="cnt" id="cnt"></span>` : ""}
+    return `<div class="pd"><div class="gal"><div class="slw"><div class="sl" id="sl">${M.map((m, n) => `<div class="sd">${slide(m, p.name, n)}</div>`).join("")}</div>
+${M.length > 1 ? `<button type="button" class="ar l" data-s="-1" aria-label="Anterior">‹</button><button type="button" class="ar r" data-s="1" aria-label="Siguiente">›</button><span class="cnt" id="cnt"></span>` : ""}</div>
 <div class="th" id="th">${M.length > 1 ? M.map(thumb).join("") : ""}</div></div>
 <div class="info"><div class="crumb"><a href="#/">Inicio</a> › <a href="#/productos?c=${encodeURIComponent(p.category || "")}">${esc(p.category || "General")}</a></div>
 <h1>${esc(p.name)}</h1>${p.short ? `<p class="sub">${esc(p.short)}</p>` : ""}
