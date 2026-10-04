@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
 import { PRODUCTS } from "./products.js";
+import { PAGES, FAQ } from "./policies.js";
 const $ = s => document.querySelector(s), app = $("#app");
 const money = n => new Intl.NumberFormat("es-CO", { style: "currency", currency: CONFIG.CURRENCY, maximumFractionDigits: 0 }).format(n);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -32,7 +33,16 @@ const trust = `<div class="trust">🚚 Envíos a toda Colombia<br>📦 Pago cont
 // Galería: fotos + videos (YouTube o archivo)
 const yt = u => (u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/) || [])[1];
 const media = p => [...(p.images || []).map(u => ({ v: 0, u })), ...(p.videos || []).map(u => ({ v: 1, u }))];
-window.sm = n => { const m = media(window._pd.p)[n]; if (!m) return; $("#mm").innerHTML = !m.v ? `<img class="main" src="${esc(m.u)}" alt="${esc(window._pd.p.name)}">` : yt(m.u) ? `<iframe class="main" src="https://www.youtube.com/embed/${yt(m.u)}" allowfullscreen loading="lazy" style="border:0"></iframe>` : `<video class="main" src="${esc(m.u)}" controls playsinline preload="metadata" style="object-fit:contain;background:#000"></video>`; };
+// Galería tipo slider: se desliza con el dedo, flechas y miniaturas; el color elegido mueve la galería
+const slide = (m, name, n) => !m.v ? `<img src="${esc(m.u)}" alt="${esc(name)}" loading="${n ? "lazy" : "eager"}">` : yt(m.u) ? `<div class="yt" data-yt="${yt(m.u)}" style="background-image:url(https://i.ytimg.com/vi/${yt(m.u)}/hqdefault.jpg)"><span>▶</span></div>` : `<video src="${esc(m.u)}" controls playsinline preload="metadata"></video>`;
+const thumb = (m, n) => m.v ? `<button type="button" class="vt" data-t="${n}" aria-label="Ver video">▶</button>` : `<img src="${esc(m.u)}" alt="" loading="lazy" data-t="${n}">`;
+const mark = n => {
+  document.querySelectorAll("#th [data-t]").forEach(e => e.classList.toggle("on", +e.dataset.t === n));
+  const c = $("#cnt"); if (c) c.textContent = `${n + 1} / ${media(window._pd.p).length}`;
+  const th = $("#th"), a = th?.querySelector(`[data-t="${n}"]`); if (a) th.scrollTo({ left: a.offsetLeft - (th.clientWidth - a.clientWidth) / 2, behavior: "smooth" });
+};
+window.sm = n => { const s = $("#sl"); if (!s) return; window._pd.cur = n; s.scrollTo({ left: n * s.clientWidth, behavior: "smooth" }); mark(n); };
+function initSlider() { const s = $("#sl"); window._pd.cur = 0; s.onscroll = () => { const n = Math.round(s.scrollLeft / s.clientWidth); if (n !== window._pd.cur) { window._pd.cur = n; mark(n); } }; mark(0); }
 // Foto de un color: la asignada en el panel o, si no hay, la del mismo orden (1.er color = foto #1)
 const colorImg = (p, c) => p.colorImages?.[c] ?? ((i => i >= 0 && i < (p.images || []).length ? i : undefined)((p.variants?.Color || []).indexOf(c)));
 const views = {
@@ -54,19 +64,21 @@ const views = {
     const p = products.find(x => (x.slug || x.id) === slug); if (!p) return "<h2>Producto no encontrado</h2>";
     track("view_item", { item_id: p.id });
     const sel = {}; Object.entries(p.variants || {}).forEach(([k, v]) => sel[k] = v[0]);
-    window._pd = { p, sel, qty: 1 };
-    const rel = products.filter(x => x.category === p.category && x.id !== p.id);
-    return `<div class="pd"><div><div id="mm"></div><div class="th">${media(p).map((m, n) => m.v ? `<button type="button" onclick="sm(${n})" aria-label="Ver video" style="width:64px;height:64px;flex:none;border:0;border-radius:10px;background:var(--g);color:#fff;font-size:22px;cursor:pointer">▶</button>` : `<img loading="lazy" src="${esc(m.u)}" alt="" onclick="sm(${n})">`).join("")}</div></div>
+    window._pd = { p, sel, qty: 1, cur: 0 };
+    const rel = products.filter(x => x.category === p.category && x.id !== p.id), M = media(p), off = !p.price || p.stock === 0;
+    const list = (t, a) => a?.length ? `<h3>${t}</h3><ul class="chk">${a.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : "";
+    return `<div class="pd"><div class="gal"><div class="sl" id="sl">${M.map((m, n) => `<div class="sd">${slide(m, p.name, n)}</div>`).join("")}</div>
+${M.length > 1 ? `<button type="button" class="ar l" data-s="-1" aria-label="Anterior">‹</button><button type="button" class="ar r" data-s="1" aria-label="Siguiente">›</button><span class="cnt" id="cnt"></span>` : ""}
+<div class="th" id="th">${M.length > 1 ? M.map(thumb).join("") : ""}</div></div>
 <div class="info"><div class="crumb"><a href="#/">Inicio</a> › <a href="#/productos?c=${encodeURIComponent(p.category || "")}">${esc(p.category || "General")}</a></div>
 <h1>${esc(p.name)}</h1>${p.short ? `<p class="sub">${esc(p.short)}</p>` : ""}
 <div class="pbox"><span class="price big">${p.price ? money(p.price) : "Precio por definir"}</span>${p.oldPrice > p.price ? `<span class="old">${money(p.oldPrice)}</span><span class="save">-${Math.round(100 - p.price / p.oldPrice * 100)}% · Ahorras ${money(p.oldPrice - p.price)}</span>` : ""}</div>
 <div class="meta"><span class="pill">🏷 ${esc(p.category || "General")}</span><span class="pill ${p.stock === 0 ? "no" : "ok"}">${p.stock === 0 ? "❌ Agotado" : p.stock > 0 ? `✅ Disponible · ${p.stock} unidades` : "✅ Disponible"}</span></div>
-${p.description ? `<h3>Descripción</h3><p class="desc">${esc(p.description)}</p>` : ""}
-${p.benefits?.length ? `<h3>Beneficios</h3><ul class="chk">${p.benefits.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
-${p.features?.length ? `<h3>Características</h3><ul class="chk">${p.features.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
-${Object.entries(p.variants || {}).map(([k, v]) => `<div class="vr"><b>${esc(k)}:</b> <span class="vl">${esc(v[0])}</span><br>${v.map((o, i) => `<span class="chip ${i ? "" : "on"}" data-k="${esc(k)}" data-v="${esc(o)}">${esc(o)}</span>`).join("")}</div>`).join("")}
-<div class="qty"><button data-q="-1">−</button><b id="q">1</b><button data-q="1">+</button></div><br>
-<button class="btn b1" data-act="buy" ${p.price && p.stock !== 0 ? "" : "disabled"}>COMPRAR AHORA</button> <button class="btn b3" data-act="add" ${p.price && p.stock !== 0 ? "" : "disabled"}>AGREGAR AL CARRITO</button>${p.stock === 0 ? '<p><b>😔 Agotado por ahora</b></p>' : ''}${trust}</div></div>
+${Object.entries(p.variants || {}).map(([k, v]) => `<div class="vr"><b>${esc(k)}:</b> <span class="vl">${esc(v[0])}</span><br>${v.map((o, i) => { const ci = k === "Color" ? colorImg(p, o) : undefined; return `<span class="chip ${i ? "" : "on"}" data-k="${esc(k)}" data-v="${esc(o)}">${ci !== undefined ? `<img src="${esc(p.images[ci])}" alt="">` : ""}${esc(o)}</span>`; }).join("")}</div>`).join("")}
+<div class="qrow"><span class="lb">Cantidad</span><div class="qty"><button data-q="-1">−</button><b id="q">1</b><button data-q="1">+</button></div></div>
+<div class="acts"><button class="btn b1" data-act="buy" ${off ? "disabled" : ""}>COMPRAR AHORA</button><button class="btn b3" data-act="add" ${off ? "disabled" : ""}>AGREGAR AL CARRITO</button></div>
+${trust}
+${p.description ? `<h3>Descripción</h3><p class="desc">${esc(p.description)}</p>` : ""}${list("Beneficios", p.benefits)}${list("Características", p.features)}</div></div>
 ${p.reviews?.length ? `<h2>Lo que dicen nuestros clientes</h2><div class="grid">${p.reviews.map(r => `<div class="rev">⭐⭐⭐⭐⭐<p>${esc(r.text)}</p><b>${esc(r.name)}</b></div>`).join("")}</div>` : ""}
 ${rel.length ? `<h2>También puede interesarte</h2><div class="grid">${rel.map(card).join("")}</div>` : ""}`;
   },
@@ -102,6 +114,14 @@ ${o.items.map(i => `<p>${i.qty}× ${esc(i.name)} (${esc(i.variant)})</p>`).join(
   info: () => `<h2>Políticas</h2><p>PLACEHOLDER: redacta aquí privacidad, términos, envíos y cambios y devoluciones.</p>`
 };
 
+// Páginas de ayuda y políticas (el texto se edita en policies.js)
+const policy = k => { const p = PAGES[k]; return `<div class="doc"><h1>${esc(p.title)}</h1><p class="upd">Última actualización: ${esc(p.upd)}</p>${p.sections.map(([h, ps]) => `<h3>${esc(h)}</h3>${ps.map(t => `<p>${esc(t)}</p>`).join("")}`).join("")}</div>`; };
+Object.keys(PAGES).forEach(k => views[k] = () => policy(k));
+views.ayuda = views.info = () => `<div class="doc"><h1>Centro de ayuda</h1><p class="upd">Resolvemos tus dudas más comunes.</p><div class="faq">${FAQ.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}</div>
+<h3>¿Necesitas más ayuda?</h3><p><a class="btn b1" target="_blank" rel="noopener" href="${waLink("Hola, Peluditos al Día. Necesito ayuda.")}">Escribir por WhatsApp</a></p>
+<h3>Políticas</h3><div class="hl"><a class="btn b3" href="#/envios">Envíos</a><a class="btn b3" href="#/cambios">Cambios y devoluciones</a><a class="btn b3" href="#/privacidad">Privacidad</a><a class="btn b3" href="#/terminos">Términos</a></div></div>`;
+// Carga el widget de Wompi solo cuando se necesita
+const loadWompi = () => window.WidgetCheckout ? Promise.resolve() : new Promise((ok, no) => { const s = document.createElement("script"); s.src = "https://checkout.wompi.co/widget.js"; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
 async function placeOrder(f) {
   const d = Object.fromEntries(new FormData(f)), sub = cart.reduce((a, i) => a + i.price * i.qty, 0);
   const clean = s => String(s || "").trim().slice(0, 300);
@@ -112,22 +132,28 @@ async function placeOrder(f) {
   if (d.pay === "WOMPI" && !(CONFIG.WOMPI_PUBLIC_KEY && CONFIG.WOMPI_SIGN_ENDPOINT)) return toast("Wompi aún no está configurado. Elige contra entrega.");
   if (db) await fs.setDoc(fs.doc(db, "orders", order.orderId), order);
   localStorage.setItem("lastOrder", JSON.stringify(order));
-  if (d.pay === "WOMPI") { // La firma de integridad la calcula el Worker (el secreto nunca está en el navegador)
+  if (d.pay === "WOMPI") { // Widget de Wompi: se abre encima de la tienda, sin salir de la página. La firma la calcula el Worker
     const r = await (await fetch(CONFIG.WOMPI_SIGN_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.orderId, amountInCents: order.total * 100, currency: CONFIG.CURRENCY }) })).json();
     if (!r.signature) return toast("No se pudo iniciar el pago con Wompi. Intenta de nuevo o elige contra entrega.");
-    const c = order.customer, ph = String(c.phone).replace(/\D/g, "").slice(-10);
-    const u = new URLSearchParams({ "public-key": CONFIG.WOMPI_PUBLIC_KEY, currency: CONFIG.CURRENCY, "amount-in-cents": order.total * 100, reference: order.orderId, "signature:integrity": r.signature,
-      "redirect-url": location.origin + location.pathname + "#/gracias", "customer-data:email": c.email, "customer-data:full-name": c.name,
-      "shipping-address:address-line-1": c.address + ", " + c.hood, "shipping-address:country": "CO", "shipping-address:city": c.city, "shipping-address:region": c.dept });
-    if (ph.length === 10) { u.set("customer-data:phone-number", ph); u.set("customer-data:phone-number-prefix", "+57"); u.set("shipping-address:phone-number", ph); }
-    cart = []; save(); return location.href = "https://checkout.wompi.co/p/?" + u;
+    await loadWompi();
+    const c = order.customer, ph = String(c.phone).replace(/\D/g, "").slice(-10), tel = ph.length === 10;
+    new WidgetCheckout({ currency: CONFIG.CURRENCY, amountInCents: order.total * 100, reference: order.orderId, publicKey: CONFIG.WOMPI_PUBLIC_KEY, signature: { integrity: r.signature },
+      customerData: { email: c.email, fullName: c.name, ...(tel ? { phoneNumber: ph, phoneNumberPrefix: "+57" } : {}) },
+      shippingAddress: { addressLine1: c.address + ", " + c.hood, city: c.city, region: c.dept, country: "CO", ...(tel ? { phoneNumber: ph } : {}) } })
+      .open(res => {
+        const t = res?.transaction; if (!t) return toast("Pago cancelado. Tu carrito sigue guardado.");
+        localStorage.setItem("lastTxId", t.id);
+        if (["APPROVED", "PENDING"].includes(t.status)) { cart = []; save(); location.hash = "#/gracias"; }
+        else toast("El pago no se completó. Intenta de nuevo o elige contra entrega.");
+      });
+    return;
   }
   track("purchase", { value: order.total, transaction_id: order.orderId }); cart = []; save(); location.hash = "#/gracias";
 }
 
 // Estado real del pago al volver de Wompi (informativo: la confirmación oficial llega por el webhook)
 async function checkPay() {
-  const id = new URLSearchParams(location.search).get("id") || new URLSearchParams(location.hash.split("?")[1] || "").get("id"), el = $("#pst"); if (!id || !el) return;
+  const id = new URLSearchParams(location.search).get("id") || new URLSearchParams(location.hash.split("?")[1] || "").get("id") || (JSON.parse(localStorage.getItem("lastOrder") || "{}").paymentMethod === "WOMPI" ? localStorage.getItem("lastTxId") : null), el = $("#pst"); if (!id || !el) return;
   try {
     const api = CONFIG.WOMPI_PUBLIC_KEY.startsWith("pub_test_") ? "https://sandbox.wompi.co/v1" : "https://production.wompi.co/v1";
     const st = (await (await fetch(`${api}/transactions/${encodeURIComponent(id)}`)).json()).data?.status;
@@ -137,11 +163,14 @@ async function checkPay() {
 }
 function route() {
   const [, r = "", arg] = location.hash.replace("#", "").split("?")[0].split("/");
-  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if (r === "gracias") checkPay(); if ($("#mm")) sm(colorImg(window._pd.p, window._pd.sel.Color) ?? 0);
+  app.innerHTML = (views[r || "home"] || views.home)(arg); scrollTo(0, 0); nav.classList.remove("open"); if (r === "gracias") checkPay(); if ($("#sl")) { initSlider(); sm(colorImg(window._pd.p, window._pd.sel.Color) ?? 0); }
   const f = $("#ck"); if (f) f.onsubmit = async e => { e.preventDefault(); $("#sb").disabled = true; try { await placeOrder(f); } catch (x) { toast("Error al enviar el pedido. Intenta de nuevo."); } $("#sb") && ($("#sb").disabled = false); };
 }
 document.addEventListener("click", e => {
   const t = e.target, pd = window._pd;
+  if (t.dataset.t) sm(+t.dataset.t);
+  if (t.dataset.s) sm(Math.max(0, Math.min(media(pd.p).length - 1, pd.cur + +t.dataset.s)));
+  const yv = t.closest?.(".yt"); if (yv) yv.outerHTML = `<iframe src="https://www.youtube.com/embed/${yv.dataset.yt}?autoplay=1" allow="autoplay; encrypted-media" allowfullscreen style="border:0;width:100%;height:100%"></iframe>`;
   if (t.dataset.v) { pd.sel[t.dataset.k] = t.dataset.v; t.parentNode.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === t)); const l = t.parentNode.querySelector(".vl"); if (l) l.textContent = t.dataset.v; const ci = colorImg(pd.p, t.dataset.v); if (t.dataset.k === "Color" && ci !== undefined) sm(+ci); }
   if (t.dataset.q) { pd.qty = Math.max(1, pd.qty + +t.dataset.q); $("#q").textContent = pd.qty; }
   if (t.dataset.act) {
