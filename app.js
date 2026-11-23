@@ -148,6 +148,7 @@ async function placeOrder(f) {
       });
     return;
   }
+  if (db && CONFIG.WOMPI_SIGN_ENDPOINT) fetch(CONFIG.WOMPI_SIGN_ENDPOINT.replace(/\/sign$/, "/order"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.orderId }), keepalive: true }).catch(() => {}); // aviso al administrador
   track("purchase", { value: order.total, transaction_id: order.orderId }); cart = []; save(); location.hash = "#/gracias";
 }
 

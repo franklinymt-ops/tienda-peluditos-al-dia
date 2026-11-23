@@ -16,6 +16,10 @@ body{font-size:16px}#app{max-width:980px;margin:auto;padding:20px 16px 0}
 .pl{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;margin-top:12px}.pc{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px #0001}
 .pc img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#eee}.pi{padding:12px 14px;display:grid;gap:3px}.pi span{color:var(--m);font-size:14px}.pa{display:flex;gap:8px;padding:0 14px 14px}
 @media(max-width:700px){.g2,.g3{grid-template-columns:1fr}}
+.tabs{display:flex;gap:8px;margin:6px 0 14px;flex-wrap:wrap}.fl{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}.ol{display:grid;gap:14px}
+.oc{background:#fff;border-radius:16px;padding:16px;box-shadow:0 2px 12px #0001}.oc.new{border-left:6px solid var(--r)}.oh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.ob{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:10px 0;font-size:15px}.oa{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.oa select{width:auto}
+@media(max-width:700px){.ob{grid-template-columns:1fr}}
 </style></head>
 <body><header><div class="wrap bar"><img src="public/images/logo.png" alt=""><b>Panel de administración</b><button class="btn b3" id="out" style="margin-left:auto;display:none">Salir</button></div></header>
 <main class="wrap" id="app"></main>
@@ -30,8 +34,42 @@ const [{ initializeApp }, A, F] = await Promise.all([import(V + "firebase-app.js
 const auth = A.getAuth(initializeApp(C.FIREBASE)), db = F.getFirestore(auth.app);
 let list = [], cur = null;
 const yt = u => (u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/) || [])[1];
+// ---- Pedidos: lista en vivo, alertas y cambio de estado ----
+const ST = ["Pendiente", "Confirmado", "Preparando", "Enviado", "Entregado", "Cancelado"];
+let ORD = [], view = "p", first = true, unsub = null, flt = "Todos";
+const tabs = a => `<div class="tabs"><button type="button" class="btn ${a === "p" ? "b2" : "b3"}" data-tab="p">📦 Productos</button><button type="button" class="btn ${a === "o" ? "b2" : "b3"}" data-tab="o">🧾 Pedidos <span id="nb"></span></button></div>`;
+function badge() { const n = ORD.filter(o => o.orderStatus === "Pendiente").length, nb = $("#nb"); if (nb) nb.textContent = n ? `(${n})` : ""; document.title = (n ? `(${n}) ` : "") + "Admin · Peluditos al Día"; }
+function alertNew(o, id) {
+  try { const c = new AudioContext(), s = c.createOscillator(); s.connect(c.destination); s.frequency.value = 880; s.start(); setTimeout(() => s.stop(), 400); } catch {}
+  if (window.Notification?.permission === "granted") new Notification("🛒 Nuevo pedido #" + id, { body: `${o.customer?.name || ""} · ${money(o.total)}` });
+}
+function listen() {
+  if (unsub) return;
+  unsub = F.onSnapshot(F.query(F.collection(db, "orders"), F.orderBy("createdAt", "desc"), F.limit(200)), snap => {
+    ORD = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!first) snap.docChanges().forEach(c => { if (c.type === "added") alertNew(c.doc.data(), c.doc.id); });
+    first = false; badge(); if (view === "o") renderOrders();
+  }, () => {});
+}
+const orderCard = o => {
+  const c = o.customer || {}, ph = String(c.whatsapp || c.phone || "").replace(/\D/g, "").slice(-10), d = o.createdAt ? new Date(o.createdAt).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }) : "";
+  const wa = ph.length === 10 ? `https://wa.me/57${ph}?text=${encodeURIComponent(`Hola ${c.name || ""}, te escribimos de Peluditos al Día por tu pedido #${o.orderId || o.id}.`)}` : "";
+  return `<div class="oc ${o.orderStatus === "Pendiente" ? "new" : ""}"><div class="oh"><b>#${esc(o.orderId || o.id)}</b><span>${esc(d)}</span><span class="price">${money(o.total)}</span></div>
+<div class="ob"><div><b>👤 ${esc(c.name)}</b><br>📞 ${esc(c.phone)} · WhatsApp ${esc(c.whatsapp)}<br>✉️ ${esc(c.email)}<br>📍 ${esc(c.address)}, ${esc(c.hood)}<br>${esc(c.city)}, ${esc(c.dept)}${c.notes ? `<br>📝 ${esc(c.notes)}` : ""}</div>
+<div>${(o.items || []).map(i => `• ${esc(i.qty)}× ${esc(i.name)}${i.variant ? " (" + esc(i.variant) + ")" : ""}`).join("<br>")}<br><br>💳 ${o.paymentMethod === "COD" ? "Contra entrega" : "Wompi"} · <b>${esc(o.paymentStatus || "")}</b>${o.transactionId ? `<br><small>Transacción ${esc(o.transactionId)}</small>` : ""}</div></div>
+<div class="oa"><select data-o="${esc(o.id)}">${ST.map(s => `<option ${s === o.orderStatus ? "selected" : ""}>${s}</option>`).join("")}</select>${wa ? `<a class="btn b1" target="_blank" rel="noopener" href="${wa}">WhatsApp</a>` : ""}${c.phone ? `<a class="btn b3" href="tel:${esc(c.phone)}">Llamar</a>` : ""}</div></div>`;
+};
+function renderOrders() {
+  const L = ORD.filter(o => flt === "Todos" || o.orderStatus === flt);
+  app.innerHTML = tabs("o") + `<div class="top"><h2>Pedidos <small>(${ORD.length})</small></h2><button class="btn b3" id="al">🔔 Activar alertas</button></div>
+<div class="fl">${["Todos", ...ST].map(s => `<button type="button" class="chip ${s === flt ? "on" : ""}" data-f="${s}">${s}${s === "Todos" ? "" : " (" + ORD.filter(o => o.orderStatus === s).length + ")"}</button>`).join("")}</div>
+<div class="ol">${L.map(orderCard).join("") || "<p>No hay pedidos en este estado.</p>"}</div>`;
+  badge(); $("#al").onclick = () => window.Notification?.requestPermission?.();
+}
+const orders = () => { view = "o"; renderOrders(); };
+app.onchange = async e => { const s = e.target; if (s.dataset.o) { try { await F.updateDoc(F.doc(db, "orders", s.dataset.o), { orderStatus: s.value }); } catch { alert("No se pudo cambiar el estado."); } } };
 $("#out").onclick = () => A.signOut(auth);
-A.onAuthStateChanged(auth, u => { $("#out").style.display = u ? "" : "none"; u ? load() : login(); });
+A.onAuthStateChanged(auth, u => { $("#out").style.display = u ? "" : "none"; if (u) { listen(); load(); } else { unsub?.(); unsub = null; first = true; ORD = []; login(); } });
 
 function login() {
   app.innerHTML = `<h2>Ingresar</h2><form id="lf" style="max-width:360px"><input id="em" type="email" placeholder="Correo" required><input id="pw" type="password" placeholder="Contraseña" required><button class="btn b1">ENTRAR</button><p id="er" style="color:var(--r)"></p></form>`;
@@ -40,12 +78,14 @@ function login() {
 async function load() {
   try { list = (await F.getDocs(F.collection(db, "products"))).docs.map(d => ({ id: d.id, ...d.data() })); }
   catch { app.innerHTML = "<h2>Sin permiso</h2><p>Revisa que tu correo esté en las reglas de Firestore.</p>"; return; }
-  app.innerHTML = `<div class="top"><h2>Mis productos <small>(${list.length})</small></h2><button class="btn b1" id="nw">+ Nuevo producto</button></div><div class="pl">` + (list.map(p => `<div class="pc"><img src="${esc(p.images?.[0])}" alt=""><div class="pi"><b>${esc(p.name)}</b><span>${esc(p.category || "")}</span><span class="price">${p.price ? money(p.price) : "Sin precio"}</span><span>${p.active ? "✅ Visible" : "⏸ Oculto"} · Stock: ${p.stock ?? "sin control"}</span></div><div class="pa"><button class="btn b3" data-e="${esc(p.id)}">Editar</button><button class="btn b3" data-x="${esc(p.id)}">🗑</button></div></div>`).join("") || "<p>Aún no hay productos. ¡Crea el primero!</p>") + `</div>`;
+  view = "p"; app.innerHTML = tabs("p") + `<div class="top"><h2>Mis productos <small>(${list.length})</small></h2><button class="btn b1" id="nw">+ Nuevo producto</button></div><div class="pl">` + (list.map(p => `<div class="pc"><img src="${esc(p.images?.[0])}" alt=""><div class="pi"><b>${esc(p.name)}</b><span>${esc(p.category || "")}</span><span class="price">${p.price ? money(p.price) : "Sin precio"}</span><span>${p.active ? "✅ Visible" : "⏸ Oculto"} · Stock: ${p.stock ?? "sin control"}</span></div><div class="pa"><button class="btn b3" data-e="${esc(p.id)}">Editar</button><button class="btn b3" data-x="${esc(p.id)}">🗑</button></div></div>`).join("") || "<p>Aún no hay productos. ¡Crea el primero!</p>") + `</div>`;
   $("#nw").onclick = () => form({ images: [], videos: [], active: true });
   promoForm();
 }
 app.onclick = async e => {
   const t = e.target, p = list.find(x => x.id === (t.dataset.e || t.dataset.x));
+  const tb = t.closest("[data-tab]"); if (tb) return tb.dataset.tab === "o" ? orders() : load();
+  if (t.dataset.f) { flt = t.dataset.f; return renderOrders(); }
   if (t.dataset.e && p) form(structuredClone(p));
   if (t.dataset.x && p && confirm("¿Eliminar «" + p.name + "»?")) { await F.deleteDoc(F.doc(db, "products", p.id)); load(); }
   if (t.dataset.rm) { const [k, i] = t.dataset.rm.split(":"); cur[k].splice(+i, 1); thumbs(); }
